@@ -1,0 +1,13 @@
+{
+  "commands.characteristic...": {
+    "failed": "An unknown error has occurred during Characteristics processing",
+    "character...": {
+      "create...": {
+        "success": "Successfully created character named \"%s\"",
+      },
+      "failed...": {
+        "duplicate": "A Character already exists with the name \"%s\"",
+      }
+    }
+  }
+}

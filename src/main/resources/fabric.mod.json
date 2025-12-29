@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "characteristic",
+  "version": "${version}",
+
+  "name": "characteristic",
+  "description": "",
+  "authors": [
+    "chyzman"
+  ],
+  "contact": {
+    "homepage": "https://modrinth.com/mod/characteristic",
+    "sources": "https://github.com/chyzman/characteristic",
+    "issues": "https://github.com/chyzman/characteristic/issues"
+  },
+
+  "license": "LGPL-3.0",
+  "icon": "assets/characteristic/icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.chyzman.characteristic.Characteristic"],
+    "client": ["com.chyzman.characteristic.client.CharacteristicClient"],
+    "cardinal-components": ["com.chyzman.characteristic.registry.CCARegistry"]
+  },
+
+  "mixins": [
+    "characteristic.mixins.json"
+  ],
+
+  "depends": {
+    "minecraft": ">=${minecraft_version}",
+    "fabricloader": "*",
+    "fabric-api": "*"
+  },
+
+  "custom": {
+    "cardinal-components": [
+      "characteristic:storage"
+    ]
+  }
+}
