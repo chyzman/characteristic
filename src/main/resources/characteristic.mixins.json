@@ -1,19 +1,21 @@
 {
-  "required": true,
-  "minVersion": "0.8",
-  "package": "com.chyzman.characteristic.mixin",
-  "compatibilityLevel": "JAVA_21",
-  "mixins": [
-    "CommonListenerCookieMixin",
-    "ServerGamePacketListenerImplMixin"
-  ],
-  "client": [
-    "client.IntegratedServerMixin"
-  ],
-  "injectors": {
-    "defaultRequire": 1
-  },
-  "overwrites": {
-    "requireAnnotations": true
+    "required": true,
+    "minVersion": "0.8",
+    "package": "com.chyzman.characteristic.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "CommonListenerCookieMixin",
+        "ServerConfigurationPacketListenerImplMixin",
+        "ServerGamePacketListenerImplMixin"
+    ],
+    "client": [
+        "client.ClientConfigurationPacketListenerImplAccessor",
+        "client.IntegratedServerMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    },
+    "overwrites": {
+        "requireAnnotations": true
   }
 }
