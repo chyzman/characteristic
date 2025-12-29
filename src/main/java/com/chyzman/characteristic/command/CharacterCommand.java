@@ -63,7 +63,7 @@ public class CharacterCommand {
                         () -> optional.ifPresentOrElse(
                             playerProfile -> {
                                 storage.setCharacter(playerProfile, storage.createCharacter(playerProfile, name).id());
-                                source.sendSuccess(() -> Component.translatable("commands.characteristic.character.create.success"), false);
+                                source.sendSuccess(() -> Component.translatable("commands.characteristic.character.create.success", name), false);
                             },
                             // This should never happen
                             () -> source.sendFailure(Component.translatable("commands.characteristic.failed"))
