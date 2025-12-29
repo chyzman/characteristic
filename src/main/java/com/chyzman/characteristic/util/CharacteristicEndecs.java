@@ -1,4 +1,4 @@
-package com.chyzman.characteristic.Util;
+package com.chyzman.characteristic.util;
 
 import io.wispforest.endec.Endec;
 import io.wispforest.owo.serialization.CodecUtils;

@@ -11,6 +11,7 @@ import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 
+import java.util.Objects;
 import java.util.Optional;
 
 import static net.minecraft.commands.Commands.argument;
@@ -21,6 +22,11 @@ public class CharacterCommand {
 
     private static final DynamicCommandExceptionType DUPLICATE_CHARACTER = new DynamicCommandExceptionType(o -> Component.translatable(
         "commands.characteristic.character.failed.duplicate",
+        o
+    ));
+
+    private static final DynamicCommandExceptionType CHARACTER_NOT_FOUND = new DynamicCommandExceptionType(o -> Component.translatable(
+        "commands.characteristic.character.failed.not_found",
         o
     ));
 
@@ -38,22 +44,46 @@ public class CharacterCommand {
                             )
                         )
                     )
-
+                    .then(literal("set")
+                        .then(argument("name", StringArgumentType.word())
+                            .suggests((context, builder) -> {
+                                var storage = CharacterStorage.get();
+                                if (storage == null) return builder.buildFuture();
+                                var data = storage.getCharacteristics(context.getSource().getPlayerOrException().getGameProfile());
+                                if (data == null) return builder.buildFuture();
+                                data.characters().stream()
+                                    .filter(uuid -> !uuid.equals(data.character().id()))
+                                    .map(uuid -> storage.allCharacters().get(uuid))
+                                    .filter(Objects::nonNull)
+                                    .map(GameProfile::name)
+                                    .forEach(builder::suggest);
+                                return builder.buildFuture();
+                            })
+                            .executes(context ->
+                                setCharacter(
+                                    context.getSource(),
+                                    StringArgumentType.getString(context, "name")
+                                )
+                            )
+                        )
+                    )
             );
         });
     }
 
-    private static int createCharacter(
-        CommandSourceStack source,
-        String name
-    ) throws CommandSyntaxException {
+    private static CharacterStorage storageOrThrow() throws CommandSyntaxException {
         var storage = CharacterStorage.get();
         if (storage == null) throw UNKNOWN_ERROR.create();
-        if (storage.allCharacters().values().stream().anyMatch(profile -> profile.name().equalsIgnoreCase(name))) throw DUPLICATE_CHARACTER.create(name);
-        var data = storage.getCharacteristics(source.getPlayerOrException().getGameProfile());
+        return storage;
+    }
 
+    private static int createCharacter(CommandSourceStack source, String name) throws CommandSyntaxException {
         var server = source.getServer();
-
+        var storage = storageOrThrow();
+        if (storage.allCharacters().values().stream().anyMatch(profile -> profile.name().equalsIgnoreCase(name))) throw DUPLICATE_CHARACTER.create(name);
+        var target = source.getPlayerOrException();
+        var data = storage.getCharacteristics(target.getGameProfile());
+        if (data == null) throw UNKNOWN_ERROR.create();
 
         Util.nonCriticalIoPool()
             .execute(
@@ -64,6 +94,7 @@ public class CharacterCommand {
                             playerProfile -> {
                                 storage.setCharacter(playerProfile, storage.createCharacter(playerProfile, name).id());
                                 source.sendSuccess(() -> Component.translatable("commands.characteristic.character.create.success", name), false);
+                                target.connection.switchToConfig();
                             },
                             // This should never happen
                             () -> source.sendFailure(Component.translatable("commands.characteristic.failed"))
@@ -71,6 +102,24 @@ public class CharacterCommand {
                     );
                 }
             );
+        return 1;
+    }
+
+    private static int setCharacter(CommandSourceStack source, String characterName) throws CommandSyntaxException {
+        var storage = storageOrThrow();
+        var target = source.getPlayerOrException();
+        var data = storage.getCharacteristics(target.getGameProfile());
+        if (data == null) throw UNKNOWN_ERROR.create();
+        var targetCharacter = data.characters().stream()
+            .map(uuid -> storage.allCharacters().get(uuid))
+            .filter(Objects::nonNull)
+            .filter(profile -> profile.name().equalsIgnoreCase(characterName))
+            .findFirst();
+        if (targetCharacter.isEmpty()) throw CHARACTER_NOT_FOUND.create(characterName);
+        storage.setCharacter(target.getGameProfile(), targetCharacter.get().id());
+        source.sendSuccess(() -> Component.translatable("commands.characteristic.character.set.success", target.getDisplayName(), characterName), false);
+        target.connection.switchToConfig();
+
         return 1;
     }
 }

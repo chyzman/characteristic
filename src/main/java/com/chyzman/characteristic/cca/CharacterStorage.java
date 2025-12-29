@@ -10,10 +10,8 @@ import io.wispforest.owo.serialization.CodecUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.resources.language.ClientLanguage;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.ExtraCodecs;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.scores.Scoreboard;
@@ -124,9 +122,7 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
 
     @Nullable
     public Characteristics getCharacteristics(GameProfile profile) {
-        if (!characters.containsKey(profile.id())) {
-            return characterizePlayer(profile);
-        }
+        if (!characters.containsKey(profile.id())) return characterizePlayer(profile);
         return character2Data.get(profile.id());
     }
 
@@ -197,4 +193,8 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
         }
     }
 
+    @Override
+    public boolean isRequiredOnClient() {
+        return false;
+    }
 }

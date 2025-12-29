@@ -2,11 +2,16 @@
   "commands.characteristic.{}": {
     "failed": "An unknown error has occurred during Characteristics processing",
     "character.{}": {
-      "create.{}": {
-        "success": "Successfully created character named \"%s\"",
-      },
       "failed.{}": {
-        "duplicate": "A Character already exists with the name \"%s\"",
+        "duplicate": 'Character with name "%s" already exists',
+        "not_found": 'No Character found with name "%s"',
+      },
+
+      "create.{}": {
+        "success": "Created new Character %s",
+      },
+      "set.{}": {
+        "success": "Set %s's character to %s",
       }
     }
   }

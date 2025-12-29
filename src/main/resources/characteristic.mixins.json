@@ -4,9 +4,11 @@
   "package": "com.chyzman.characteristic.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "CommonListenerCookieMixin"
+    "CommonListenerCookieMixin",
+    "ServerGamePacketListenerImplMixin"
   ],
   "client": [
+    "client.IntegratedServerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
