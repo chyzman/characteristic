@@ -1,4 +1,4 @@
-package com.chyzman.characteristic.mixin.client;
+package com.chyzman.characteristic.mixin.client.access;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.multiplayer.ClientConfigurationPacketListenerImpl;

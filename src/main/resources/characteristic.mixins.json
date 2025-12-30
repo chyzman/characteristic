@@ -9,7 +9,7 @@
         "ServerGamePacketListenerImplMixin"
     ],
     "client": [
-        "client.ClientConfigurationPacketListenerImplAccessor",
+      "client.access.ClientConfigurationPacketListenerImplAccessor",
         "client.IntegratedServerMixin"
     ],
     "injectors": {
