@@ -9,8 +9,6 @@ public class CharacteristicClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        ClientConfigurationNetworking.registerGlobalReceiver(SwitchGameProfileS2CPayload.TYPE, (payload, context) -> {
-            ((ClientConfigurationPacketListenerImplAccessor) context.networkHandler()).setLocalGameProfile(payload.newProfile());
-        });
+        ClientConfigurationNetworking.registerGlobalReceiver(SwitchGameProfileS2CPayload.TYPE, (payload, context) -> ((ClientConfigurationPacketListenerImplAccessor) context.networkHandler()).setLocalGameProfile(payload.newProfile()));
     }
 }
