@@ -2,17 +2,23 @@
   "commands.characteristic.{}": {
     "failed": "An unknown error has occurred during Characteristics processing",
     "character.{}": {
-      "failed.{}": {
-        "duplicate": 'Character with name "%s" already exists',
-        "not_found": 'No Character found with name "%s"',
-      },
-
       "create.{}": {
         "success": "Created new Character %s",
       },
       "set.{}": {
         "success": "Set %s's character to %s",
       }
+    }
+  },
+  "argument.characteristic.{}": {
+    "name.{}": {
+      "too_long": "Name was too long (%s > maximum %s characters)",
+      "invalid_character": 'Name contains invalid character: "%s"',
+      "empty": "Name cannot be empty",
+    },
+    "character.{}": {
+      "duplicate": 'Character with name "%s" already exists',
+      "not_found": 'No Character found with name "%s"',
     }
   }
 }

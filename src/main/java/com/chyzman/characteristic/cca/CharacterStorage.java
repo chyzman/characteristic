@@ -126,10 +126,9 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
         return character2Data.get(profile.id());
     }
 
-    public GameProfile createCharacter(GameProfile playerProfile, String name) {
-        var character = new GameProfile(UUID.randomUUID(), name, playerProfile.properties());
+    public GameProfile createCharacter(GameProfile playerProfile, GameProfile character) {
         characters.put(character.id(), character);
-        var data = player2Data.get(playerProfile.id());
+        var data = getCharacteristics(playerProfile);
         data.characters.add(character.id());
         character2Data.put(character.id(), data);
         update();
