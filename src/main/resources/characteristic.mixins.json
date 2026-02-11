@@ -4,12 +4,17 @@
   "package": "com.chyzman.characteristic.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "CommonListenerCookieMixin",
+    "CCASkillIssueMixin",
     "PlayerListMixin",
+    "ServerCommonPacketListenerImplMixin",
     "ServerConfigurationPacketListenerImplMixin",
-    "ServerGamePacketListenerImplMixin"
+    "ServerLoginPacketListenerImplMixin",
+    "client.access.ServerCommonPacketListenerImplAccessor"
   ],
-  "client": ["client.IntegratedServerMixin", "client.access.ClientConfigurationPacketListenerImplAccessor"],
+  "client": [
+    "client.IntegratedServerMixin",
+    "client.access.ClientConfigurationPacketListenerImplAccessor"
+  ],
   "injectors": {
     "defaultRequire": 1
   },

@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.14+'
+    id 'fabric-loom' version '1.15+'
 }
 
 version = project.mod_version + "+" + project.minecraft_base_version
@@ -54,6 +54,10 @@ java {
         toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
     }
     withSourcesJar()
+}
+
+loom {
+    accessWidenerPath = file("src/main/resources/characteristic.accesswidener")
 }
 
 jar {

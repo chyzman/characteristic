@@ -18,6 +18,8 @@ public abstract class IntegratedServerMixin {
         var storage = CharacterStorage.get();
         if (storage == null) return original;
 
-        return storage.getCharacteristics(original).character();
+        var character = storage.getCharacter(original);
+
+        return character == null ? original : character.profile();
     }
 }

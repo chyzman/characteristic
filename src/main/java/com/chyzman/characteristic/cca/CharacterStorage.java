@@ -1,5 +1,8 @@
 package com.chyzman.characteristic.cca;
 
+import com.chyzman.characteristic.mixin.client.access.ServerCommonPacketListenerImplAccessor;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
 import com.mojang.authlib.GameProfile;
 import io.wispforest.endec.Endec;
 import io.wispforest.endec.impl.BuiltInEndecs;
@@ -10,7 +13,9 @@ import io.wispforest.owo.serialization.CodecUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.Connection;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -27,10 +32,14 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
     private final Scoreboard holder;
     public final @Nullable MinecraftServer server;
 
-    private final Map<UUID, GameProfile> characters = new HashMap<>();
+    // Character UUID -> Character
+    private final Map<UUID, Character> characters = new HashMap<>();
 
-    private final Map<UUID, Characteristics> player2Data = new HashMap<>();
-    private final Map<UUID, Characteristics> character2Data = new HashMap<>();
+    // Player UUID -> Character UUID (and vice versa)
+    private final Map<UUID, UUID> currentCharacters = new HashMap<>();
+
+    // Connection -> Player Profile
+    public final Map<Connection, GameProfile> connections = new WeakHashMap<>();
 
     //region CURSED GETTER
 
@@ -54,9 +63,15 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
 
     //region ENDEC STUFF
 
-    private static final KeyedEndec<Set<GameProfile>> CHARACTERS_ENDEC = CodecUtils.toEndec(ExtraCodecs.STORED_GAME_PROFILE.codec()).setOf().keyed("characters", HashSet::new);
+    private static final KeyedEndec<Set<Character>> CHARACTERS_ENDEC =
+        Character.ENDEC.setOf()
+            .keyed("characters", HashSet::new);
 
-    private static final KeyedEndec<Set<Characteristics>> CHARACTERISTICS_ENDEC = Characteristics.ENDEC.setOf().keyed("characteristics", HashSet::new);
+    private static final KeyedEndec<Map<UUID, UUID>> CURRENT_CHARACTERS_ENDEC =
+        BuiltInEndecs.UUID
+            .mapOf(UUID::toString, UUID::fromString)
+            .keyed("current_characters", HashMap::new);
+
 
     public CharacterStorage(Scoreboard holder, @Nullable MinecraftServer server) {
         this.holder = holder;
@@ -65,24 +80,18 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
 
     @Override
     public void readData(ValueInput valueInput) {
-        var characterSet = valueInput.get(CHARACTERS_ENDEC);
         this.characters.clear();
-        for (var character : characterSet) this.characters.put(character.id(), character);
+        valueInput.get(CHARACTERS_ENDEC).forEach(this::initializeCharacter);
 
-        var characteristicsSet = valueInput.get(CHARACTERISTICS_ENDEC);
-        this.player2Data.clear();
-        this.character2Data.clear();
-        for (var data : characteristicsSet) {
-            player2Data.put(data.owner, data);
-            for (var character : data.characters) character2Data.put(character, data);
-        }
+        this.currentCharacters.clear();
+        this.currentCharacters.putAll(valueInput.get(CURRENT_CHARACTERS_ENDEC));
     }
 
     @Override
     public void writeData(ValueOutput valueOutput) {
         valueOutput.put(CHARACTERS_ENDEC, new HashSet<>(this.characters.values()));
 
-        valueOutput.put(CHARACTERISTICS_ENDEC, new HashSet<>(this.player2Data.values()));
+        valueOutput.put(CURRENT_CHARACTERS_ENDEC, this.currentCharacters);
     }
 
     private void update() {
@@ -91,109 +100,89 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
 
     //endregion
 
-    //region INITIALIZATION
-
-    private Characteristics characterizePlayer(GameProfile profile) {
-        var player = profile.id();
-
-        characters.put(player, profile);
-
-        var characteristics = Characteristics.forPlayer(player);
-
-        initializeCharacteristics(characteristics);
-
-        update();
-
-        return characteristics;
-    }
-
-    private void initializeCharacteristics(Characteristics characteristics) {
-        player2Data.put(characteristics.owner, characteristics);
-        for (var character : characteristics.characters) {
-            character2Data.put(character, characteristics);
-        }
-    }
-
-    //endregion
-
-    public Map<UUID, GameProfile> allCharacters() {
-        return Collections.unmodifiableMap(characters);
-    }
-
-    @Nullable
-    public Characteristics getCharacteristics(GameProfile profile) {
-        if (!characters.containsKey(profile.id())) return characterizePlayer(profile);
-        return character2Data.get(profile.id());
-    }
-
-    public GameProfile createCharacter(GameProfile playerProfile, GameProfile character) {
-        characters.put(character.id(), character);
-        var data = getCharacteristics(playerProfile);
-        data.characters.add(character.id());
-        character2Data.put(character.id(), data);
+    public Character createCharacter(GameProfile profile, UUID owner) {
+        var character = new Character(profile, owner);
+        initializeCharacter(character);
         update();
         return character;
     }
 
-    public void setCharacter(GameProfile playerProfile, UUID character) {
-        var data = getCharacteristics(playerProfile);
-        if (data == null) return;
-        data.character(character);
+    private void initializeCharacter(Character characteristics) {
+        this.characters.put(characteristics.profile().id(), characteristics);
+    }
+
+    public Map<UUID, Character> allCharacters() {
+        return Collections.unmodifiableMap(characters);
+    }
+
+    public Map<UUID, UUID> currentCharacters() {
+        return Collections.unmodifiableMap(currentCharacters);
+    }
+
+    public Character getCharacter(GameProfile profile) {
+        var character = characters.get(currentCharacters.get(profile.id()));
+        if (character == null) {
+            character = Character.forPlayer(profile);
+            initializeCharacter(character);
+            update();
+        }
+        return character;
+    }
+
+    public void setCharacter(UUID target, UUID character) {
+        currentCharacters.put(target, character);
         update();
     }
 
-    public static class Characteristics {
+    @Nullable
+    public GameProfile getControllingProfile(ServerPlayer player) {
+        return connections.get(((ServerCommonPacketListenerImplAccessor)player.connection).characteristic$getConnection());
+    }
+
+    public static class Character {
+        private final GameProfile profile;
         private final UUID owner;
-        private UUID character;
-        private final Set<UUID> characters;
 
         //region ENDEC STUFF
 
-        public static final Endec<Characteristics> ENDEC = StructEndecBuilder.of(
+        public static final Endec<Character> ENDEC = StructEndecBuilder.of(
+            CodecUtils.toEndec(ExtraCodecs.STORED_GAME_PROFILE.codec()).fieldOf("profile", s -> s.profile),
             BuiltInEndecs.UUID.fieldOf("owner", s -> s.owner),
-            BuiltInEndecs.UUID.fieldOf("character", s -> s.character),
-            BuiltInEndecs.UUID.setOf().fieldOf("characters", s -> s.characters),
-            Characteristics::new
+            Character::new
         );
 
-        private Characteristics(UUID owner, UUID character, Set<UUID> characters) {
+        private Character(GameProfile profile, UUID owner) {
+            this.profile = profile;
             this.owner = owner;
-            this.character = character;
-            this.characters = characters;
-            if (character != null) this.characters.add(character);
         }
 
         //endregion
 
         //region GETTERS AND SETTERS
 
+        public GameProfile profile() {
+            return profile;
+        }
+
         public UUID owner() {
             return owner;
         }
 
-        public Characteristics character(UUID character) {
-            this.character = character;
-            this.characters.add(character);
-            return this;
-        }
-
-        public GameProfile character() {
-            return CharacterStorage.get().characters.get(this.character);
-        }
-
-        public Set<UUID> characters() {
-            return Collections.unmodifiableSet(characters);
-        }
-
         //endregion
 
-        public static Characteristics forPlayer(UUID player) {
-            return new Characteristics(player, player, new HashSet<>(Set.of()));
+        public static Character forPlayer(GameProfile profile) {
+            return new Character(profile, profile.id());
         }
     }
 
     @Override
-    public boolean isRequiredOnClient() {
-        return false;
+    public boolean equals(Object o) {
+        if (!(o instanceof CharacterStorage storage)) return false;
+        return Objects.equals(characters, storage.characters) && Objects.equals(currentCharacters, storage.currentCharacters);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(characters, currentCharacters);
     }
 }
