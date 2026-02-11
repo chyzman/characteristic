@@ -16,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.network.Connection;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerCommonPacketListenerImpl;
 import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -108,7 +109,7 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
     }
 
     private void initializeCharacter(Character characteristics) {
-        this.characters.put(characteristics.profile().id(), characteristics);
+        this.characters.put(characteristics.id(), characteristics);
     }
 
     public Map<UUID, Character> allCharacters() {
@@ -134,9 +135,24 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
         update();
     }
 
+    public void clearCharacter(UUID target) {
+        currentCharacters.remove(target);
+        update();
+    }
+
+    @Nullable
+    public GameProfile getControllingProfile(Connection connection) {
+        return connections.get(connection);
+    }
+
+    @Nullable
+    public GameProfile getControllingProfile(ServerCommonPacketListenerImpl serverCommonPacketListener) {
+        return getControllingProfile(((ServerCommonPacketListenerImplAccessor) serverCommonPacketListener).characteristic$getConnection());
+    }
+
     @Nullable
     public GameProfile getControllingProfile(ServerPlayer player) {
-        return connections.get(((ServerCommonPacketListenerImplAccessor)player.connection).characteristic$getConnection());
+        return getControllingProfile(player.connection);
     }
 
     public static class Character {
@@ -162,6 +178,14 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
 
         public GameProfile profile() {
             return profile;
+        }
+
+        public UUID id() {
+            return profile.id();
+        }
+
+        public String name() {
+            return profile.name();
         }
 
         public UUID owner() {

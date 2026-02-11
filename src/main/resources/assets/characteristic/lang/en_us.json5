@@ -20,5 +20,7 @@
       "duplicate": 'Character with name "%s" already exists',
       "not_found": 'No Character found with name "%s"',
     }
-  }
+  },
+  "menu.characteristic.changeCharacter": "Change Character",
+  "characteristic.multiplayer.disconnect.missing": "This server requires you to have Characteristic to join. Please install or update Characteristic and try again.",
 }

@@ -58,7 +58,7 @@ public class CharacterArgument extends NameArgument {
         var storage = CharacterStorage.get();
         //TODO: change this error probably
         if (storage == null) throw UNKNOWN_ERROR.createWithContext(reader);
-        var exists = storage.allCharacters().values().stream().anyMatch(character -> character.profile().name().equalsIgnoreCase(parsed));
+        var exists = storage.allCharacters().values().stream().anyMatch(character -> character.name().equalsIgnoreCase(parsed));
         if (type == Type.EXISTING != exists) throw (type == Type.UNIQUE ? DUPLICATE : NOT_FOUND).create(parsed);
         return parsed;
     }
@@ -68,7 +68,7 @@ public class CharacterArgument extends NameArgument {
         if (type == Type.UNIQUE) return builder.buildFuture();
         var storage = CharacterStorage.get();
         if (storage == null) return CompletableFuture.completedFuture(builder.build());
-        SharedSuggestionProvider.suggest(storage.allCharacters().values().stream().map(character -> character.profile().name()), builder);
+        SharedSuggestionProvider.suggest(storage.allCharacters().values().stream().map(CharacterStorage.Character::name), builder);
         return builder.buildFuture();
     }
 

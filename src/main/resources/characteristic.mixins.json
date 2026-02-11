@@ -13,6 +13,7 @@
   ],
   "client": [
     "client.IntegratedServerMixin",
+    "client.PauseScreenMixin",
     "client.access.ClientConfigurationPacketListenerImplAccessor"
   ],
   "injectors": {
