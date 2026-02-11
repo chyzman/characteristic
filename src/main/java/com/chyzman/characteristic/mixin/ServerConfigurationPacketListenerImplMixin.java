@@ -1,6 +1,6 @@
 package com.chyzman.characteristic.mixin;
 
-import com.chyzman.characteristic.network.SwitchGameProfileS2CPayload;
+import com.chyzman.characteristic.network.payload.S2CSwitchGameProfilePayload;
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
 import net.minecraft.network.Connection;
@@ -25,6 +25,6 @@ public abstract class ServerConfigurationPacketListenerImplMixin extends ServerC
 
     @Inject(method = "returnToWorld", at = @At("HEAD"))
     private void sendNewProfile(CallbackInfo ci) {
-        send(ServerConfigurationNetworking.createS2CPacket(new SwitchGameProfileS2CPayload(gameProfile)));
+        send(ServerConfigurationNetworking.createS2CPacket(new S2CSwitchGameProfilePayload(gameProfile)));
     }
 }

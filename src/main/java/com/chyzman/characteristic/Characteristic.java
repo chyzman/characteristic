@@ -1,6 +1,7 @@
 package com.chyzman.characteristic;
 
-import com.chyzman.characteristic.network.SwitchGameProfileS2CPayload;
+import com.chyzman.characteristic.network.CharacterSwitchHandler;
+import com.chyzman.characteristic.network.payload.S2CSwitchGameProfilePayload;
 import com.chyzman.characteristic.registry.CommandRegistry;
 import io.wispforest.owo.serialization.CodecUtils;
 import net.fabricmc.api.ModInitializer;
@@ -14,7 +15,9 @@ public class Characteristic implements ModInitializer {
     public void onInitialize() {
         CommandRegistry.init();
 
-        PayloadTypeRegistry.configurationS2C().register(SwitchGameProfileS2CPayload.TYPE, CodecUtils.toPacketCodec(SwitchGameProfileS2CPayload.ENDEC));
+        PayloadTypeRegistry.configurationS2C().register(S2CSwitchGameProfilePayload.TYPE, CodecUtils.toPacketCodec(S2CSwitchGameProfilePayload.ENDEC));
+
+        CharacterSwitchHandler.init();
     }
 
     public static Identifier id(String path) {

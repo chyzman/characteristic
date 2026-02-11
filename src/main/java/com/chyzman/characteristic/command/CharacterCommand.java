@@ -98,8 +98,8 @@ public class CharacterCommand {
                                     var storage = storageOrThrow();
                                     storage.allCharacters().values().forEach(character -> context.getSource().sendSuccess(
                                         () -> Component.literal(
-                                            character.profile().name() + "\n" +
-                                            character.profile().id() + "\n" +
+                                            character.name() + "\n" +
+                                            character.id() + "\n" +
                                             character.owner()
                                         ), false
                                     ));
@@ -110,7 +110,7 @@ public class CharacterCommand {
                                 .executes(context -> {
                                     var storage = storageOrThrow();
                                     storage.currentCharacters().forEach((player, character) ->
-                                        context.getSource().sendSuccess(() -> Component.literal(player + " → " + storage.allCharacters().get(character).profile().name()), false));
+                                        context.getSource().sendSuccess(() -> Component.literal(player + " → " + storage.allCharacters().get(character).name()), false));
                                     return 1;
                                 })
                             )
@@ -129,13 +129,13 @@ public class CharacterCommand {
     private static int createCharacter(CommandSourceStack source, GameProfile profile, @Nullable UUID owner) throws CommandSyntaxException {
         var server = source.getServer();
         var storage = storageOrThrow();
-        if (storage.allCharacters().values().stream().anyMatch(character -> character.profile().name().equalsIgnoreCase(profile.name())))
+        if (storage.allCharacters().values().stream().anyMatch(character -> character.name().equalsIgnoreCase(profile.name())))
             throw DUPLICATE_CHARACTER.create(profile.name());
         var player = source.getPlayerOrException();
         var target = storage.getControllingProfile(player);
         if (target == null) throw UNKNOWN_ERROR.create();
         if (owner == null) owner = target.id();
-        storage.setCharacter(target.id(), storage.createCharacter(profile, owner).profile().id());
+        storage.setCharacter(target.id(), storage.createCharacter(profile, owner).id());
         source.sendSuccess(() -> Component.translatable("commands.characteristic.character.create.success", profile.name()), false);
         ServerPlayNetworking.reconfigure(player);
         return 1;
@@ -147,10 +147,10 @@ public class CharacterCommand {
         var target = storage.getControllingProfile(player);
         if (target == null) throw UNKNOWN_ERROR.create();
         var targetCharacter = storage.allCharacters().values().stream()//            .filter(Objects::nonNull)
-            .filter(character -> character.profile().name().equalsIgnoreCase(name))
+            .filter(character -> character.name().equalsIgnoreCase(name))
             .findFirst();
         if (targetCharacter.isEmpty()) throw CHARACTER_NOT_FOUND.create(name);
-        storage.setCharacter(target.id(), targetCharacter.get().profile().id());
+        storage.setCharacter(target.id(), targetCharacter.get().id());
         source.sendSuccess(() -> Component.translatable("commands.characteristic.character.set.success", player.getDisplayName(), name), false);
         ServerPlayNetworking.reconfigure(player);
         return 1;
