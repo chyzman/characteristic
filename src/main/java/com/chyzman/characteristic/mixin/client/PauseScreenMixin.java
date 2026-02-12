@@ -1,14 +1,12 @@
 package com.chyzman.characteristic.mixin.client;
 
-import com.chyzman.characteristic.network.CharacterSwitchHandler;
+import com.chyzman.characteristic.network.CharacterHandler;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
-import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.layouts.LayoutElement;
@@ -32,7 +30,7 @@ public abstract class PauseScreenMixin {
                 Component.translatable("menu.characteristic.changeCharacter"),
                 button -> {
                     button.active = false;
-                    ClientPlayNetworking.send(CharacterSwitchHandler.RequestCharacterSwitcher.INSTANCE);
+                    ClientPlayNetworking.send(CharacterHandler.C2SOpenCharacterSwitcher.INSTANCE);
                 }
             )
             .width(BUTTON_WIDTH_FULL);

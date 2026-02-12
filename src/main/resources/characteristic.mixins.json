@@ -6,10 +6,7 @@
   "mixins": [
     "CCASkillIssueMixin",
     "PlayerListMixin",
-    "ServerCommonPacketListenerImplMixin",
-    "ServerConfigurationPacketListenerImplMixin",
-    "ServerLoginPacketListenerImplMixin",
-    "client.access.ServerCommonPacketListenerImplAccessor"
+    "ServerCommonPacketListenerImplMixin", "ServerLoginPacketListenerImplMixin"
   ],
   "client": [
     "client.IntegratedServerMixin",

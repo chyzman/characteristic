@@ -3,7 +3,6 @@ package com.chyzman.characteristic.command;
 import com.chyzman.characteristic.cca.CharacterStorage;
 import com.chyzman.characteristic.command.argument.CharacterArgument;
 import com.chyzman.characteristic.command.argument.ProfileArgument;
-import com.chyzman.characteristic.mixin.client.access.ServerCommonPacketListenerImplAccessor;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;

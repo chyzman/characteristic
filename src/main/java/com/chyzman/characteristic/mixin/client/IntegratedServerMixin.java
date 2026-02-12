@@ -17,9 +17,7 @@ public abstract class IntegratedServerMixin {
     private GameProfile characterizeProfile(GameProfile original) {
         var storage = CharacterStorage.get();
         if (storage == null) return original;
-
         var character = storage.getCharacter(original);
-
         return character == null ? original : character.profile();
     }
 }

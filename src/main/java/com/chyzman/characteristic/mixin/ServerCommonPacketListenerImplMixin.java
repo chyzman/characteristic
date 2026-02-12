@@ -28,6 +28,7 @@ public abstract class ServerCommonPacketListenerImplMixin {
         var profile = original.call(instance);
         var storage = CharacterStorage.get();
         if (storage == null) return profile;
-        return storage.getCharacter(storage.connections.getOrDefault(connection, profile)).profile();
+        var character = storage.getCharacter(storage.connections.getOrDefault(connection, profile));
+        return character == null ? profile : character.profile();
     }
 }

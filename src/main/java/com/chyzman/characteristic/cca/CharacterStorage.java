@@ -1,14 +1,12 @@
 package com.chyzman.characteristic.cca;
 
-import com.chyzman.characteristic.mixin.client.access.ServerCommonPacketListenerImplAccessor;
-import com.google.common.collect.BiMap;
-import com.google.common.collect.HashBiMap;
 import com.mojang.authlib.GameProfile;
 import io.wispforest.endec.Endec;
 import io.wispforest.endec.impl.BuiltInEndecs;
 import io.wispforest.endec.impl.KeyedEndec;
 import io.wispforest.endec.impl.StructEndecBuilder;
 import io.wispforest.owo.Owo;
+import io.wispforest.owo.mixin.ServerCommonPacketListenerImplAccessor;
 import io.wispforest.owo.serialization.CodecUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -120,14 +118,9 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
         return Collections.unmodifiableMap(currentCharacters);
     }
 
+    @Nullable
     public Character getCharacter(GameProfile profile) {
-        var character = characters.get(currentCharacters.get(profile.id()));
-        if (character == null) {
-            character = Character.forPlayer(profile);
-            initializeCharacter(character);
-            update();
-        }
-        return character;
+        return characters.get(currentCharacters.get(profile.id()));
     }
 
     public void setCharacter(UUID target, UUID character) {
@@ -147,7 +140,7 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
 
     @Nullable
     public GameProfile getControllingProfile(ServerCommonPacketListenerImpl serverCommonPacketListener) {
-        return getControllingProfile(((ServerCommonPacketListenerImplAccessor) serverCommonPacketListener).characteristic$getConnection());
+        return getControllingProfile(((ServerCommonPacketListenerImplAccessor) serverCommonPacketListener).owo$getConnection());
     }
 
     @Nullable
