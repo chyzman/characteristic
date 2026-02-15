@@ -12,6 +12,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.Connection;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
@@ -114,6 +115,14 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
         return Collections.unmodifiableMap(characters);
     }
 
+    public boolean modifyCharacter(Character newCharacter) {
+        var id = newCharacter.id();
+        if (!characters.containsKey(newCharacter.id())) return false;
+        characters.put(id, newCharacter);
+        update();
+        return true;
+    }
+
     public Map<UUID, UUID> currentCharacters() {
         return Collections.unmodifiableMap(currentCharacters);
     }
@@ -160,7 +169,7 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
             Character::new
         );
 
-        private Character(GameProfile profile, UUID owner) {
+        public Character(GameProfile profile, UUID owner) {
             this.profile = profile;
             this.owner = owner;
         }
@@ -189,6 +198,12 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
 
         public static Character forPlayer(GameProfile profile) {
             return new Character(profile, profile.id());
+        }
+
+        public boolean differencesAreValidEdits(Character other) {
+            if (!this.id().equals(other.id())) return false;
+            if (!this.owner().equals(other.owner())) return false;
+            return true;
         }
     }
 

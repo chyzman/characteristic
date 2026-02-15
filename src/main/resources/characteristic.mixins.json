@@ -5,12 +5,17 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "CCASkillIssueMixin",
+    "MinecraftProfileTextureMixin",
     "PlayerListMixin",
-    "ServerCommonPacketListenerImplMixin", "ServerLoginPacketListenerImplMixin"
+    "PlayerSkinMixin",
+    "ServerCommonPacketListenerImplMixin",
+    "ServerLoginPacketListenerImplMixin",
+    "TextureUrlCheckerMixin"
   ],
   "client": [
     "client.IntegratedServerMixin",
     "client.PauseScreenMixin",
+    "client.SkinTextureDownloaderMixin",
     "client.access.ClientConfigurationPacketListenerImplAccessor"
   ],
   "injectors": {

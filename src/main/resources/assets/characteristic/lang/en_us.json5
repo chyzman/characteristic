@@ -23,4 +23,12 @@
   },
   "menu.characteristic.changeCharacter": "Change Character",
   "characteristic.multiplayer.disconnect.missing": "This server requires you to have Characteristic to join. Please install or update Characteristic and try again.",
+
+  "ui.characteristic.{}": {
+    "character_picker.{}": {
+      title: "Select Character",
+      aborted: "Character selection aborted",
+      select: "Select",
+    }
+  }
 }

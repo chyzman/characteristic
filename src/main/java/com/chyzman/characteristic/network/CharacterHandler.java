@@ -3,17 +3,18 @@ package com.chyzman.characteristic.network;
 import com.chyzman.characteristic.Characteristic;
 import com.chyzman.characteristic.cca.CharacterStorage;
 import com.chyzman.characteristic.mixin.client.access.ClientConfigurationPacketListenerImplAccessor;
+import com.chyzman.characteristic.ui.CharacteristicConfigurationScreen;
 import com.chyzman.characteristic.ui.widget.CharacterPicker;
 import com.mojang.authlib.GameProfile;
 import io.wispforest.endec.Endec;
 import io.wispforest.endec.impl.BuiltInEndecs;
 import io.wispforest.endec.impl.StructEndecBuilder;
-import io.wispforest.owo.braid.core.BraidScreen;
 import io.wispforest.owo.serialization.CodecUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.*;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -29,12 +30,13 @@ import java.util.function.Consumer;
 
 public class CharacterHandler {
 
-
     public static void init() {
         PayloadTypeRegistry.configurationS2C().register(S2CSwapProfile.TYPE, CodecUtils.toPacketCodec(S2CSwapProfile.ENDEC));
         PayloadTypeRegistry.configurationC2S().register(C2SSwapProfile.TYPE, CodecUtils.toPacketCodec(C2SSwapProfile.ENDEC));
         PayloadTypeRegistry.configurationS2C().register(S2CPickCharacter.TYPE, CodecUtils.toPacketCodec(S2CPickCharacter.ENDEC));
         PayloadTypeRegistry.configurationC2S().register(C2SPickCharacter.TYPE, CodecUtils.toPacketCodec(C2SPickCharacter.ENDEC));
+        PayloadTypeRegistry.configurationS2C().register(S2CUpdateCharacterChoices.TYPE, CodecUtils.toPacketCodec(S2CUpdateCharacterChoices.ENDEC));
+        PayloadTypeRegistry.configurationC2S().register(C2SEditCharacter.TYPE, CodecUtils.toPacketCodec(C2SEditCharacter.ENDEC));
         PayloadTypeRegistry.playC2S().register(C2SOpenCharacterSwitcher.TYPE, CodecUtils.toPacketCodec(C2SOpenCharacterSwitcher.ENDEC));
 
         ServerConfigurationConnectionEvents.CONFIGURE.register((handler, server) -> {
@@ -48,12 +50,11 @@ public class CharacterHandler {
             var target = storage.getControllingProfile(handler);
             if (target == null) return;
             if (!storage.currentCharacters().containsKey(target.id())) {
-                //TODO: validate choices once we actually make permission stuff
+                //TODO: filter choices once we actually make permission stuff
                 var choices = storage.allCharacters().values().stream().toList();
                 handler.addTask(new PickCharacterTask(choices));
             }
             handler.addTask(new SwapProfileTask(target));
-
         });
 
         ServerPlayNetworking.registerGlobalReceiver(
@@ -68,21 +69,42 @@ public class CharacterHandler {
             }
         );
 
-        ServerConfigurationNetworking.registerGlobalReceiver(C2SSwapProfile.TYPE, (payload, context) -> context.networkHandler().completeTask(SwapProfileTask.TYPE));
+        ServerConfigurationNetworking.registerGlobalReceiver(
+            C2SSwapProfile.TYPE, (payload, context) -> context.networkHandler().completeTask(SwapProfileTask.TYPE)
+        );
 
         ServerConfigurationNetworking.registerGlobalReceiver(
             C2SPickCharacter.TYPE, (payload, context) -> {
                 var handler = context.networkHandler();
-                handler.completeTask(PickCharacterTask.TYPE);
                 var storage = CharacterStorage.get();
-                if (storage == null) return;
-                var target = storage.getControllingProfile(handler);
-                if (target == null) return;
-                var character = storage.allCharacters().get(payload.choice());
-                if (character == null) return;
-                //TODO: validate character choice
-                storage.setCharacter(target.id(), character.id());
-//                handler.addTask(new SwapProfileTask(character.profile()));
+                if (storage != null) {
+                    var target = storage.getControllingProfile(handler);
+                    if (target != null) {
+                        var character = storage.allCharacters().get(payload.choice());
+                        if (character != null) {
+                            //TODO: validate character choice
+                            storage.setCharacter(target.id(), character.id());
+                        }
+                    }
+                }
+                handler.completeTask(PickCharacterTask.TYPE);
+            }
+        );
+
+        ServerConfigurationNetworking.registerGlobalReceiver(
+            C2SEditCharacter.TYPE, (payload, context) -> {
+                var storage = CharacterStorage.get();
+                if (storage != null) {
+                    var target = storage.getControllingProfile(context.networkHandler());
+                    if (target != null) {
+                        var character = storage.allCharacters().get(payload.character.id());
+                        if (character != null) {
+                            if (character.differencesAreValidEdits(payload.character)) storage.modifyCharacter(payload.character);
+                        }
+                    }
+                }
+                //TODO: filter choices once we have permissions
+                context.responseSender().sendPacket(new S2CUpdateCharacterChoices(storage.allCharacters().values().stream().toList()));
             }
         );
     }
@@ -91,19 +113,24 @@ public class CharacterHandler {
     public static void initClient() {
         ClientConfigurationNetworking.registerGlobalReceiver(
             S2CSwapProfile.TYPE,
-            (payload, context) -> context.client().schedule(() -> {
+            (payload, context) -> {
                 ((ClientConfigurationPacketListenerImplAccessor) context.networkHandler()).characteristic$setLocalGameProfile(payload.profile);
                 context.responseSender().sendPacket(C2SSwapProfile.INSTANCE);
-            })
+            }
         );
 
         ClientConfigurationNetworking.registerGlobalReceiver(
             S2CPickCharacter.TYPE,
-            (payload, context) -> context.client().schedule(() -> context.client()
-                .setScreen(new BraidScreen(new CharacterPicker(
-                    payload.choices, character ->
-                    context.responseSender().sendPacket(new C2SPickCharacter(character.id()))
-                ))))
+            (payload, context) -> context.client().schedule(() -> {
+                var client = context.client();
+                client.setScreen(
+                    new CharacteristicConfigurationScreen(client.screen, new CharacterPicker(context, payload.choices)));
+            })
+        );
+
+        ClientConfigurationNetworking.registerGlobalReceiver(
+            S2CUpdateCharacterChoices.TYPE,
+            (payload, context) -> CharacterPicker.CHARACTER_CHOICES.setValue(payload.choices())
         );
     }
 
@@ -183,7 +210,8 @@ public class CharacterHandler {
     public record S2CPickCharacter(List<CharacterStorage.Character> choices) implements CustomPacketPayload {
         public static final Type<S2CPickCharacter> TYPE = new Type<>(PICK_CHARACTER);
         public static final Endec<S2CPickCharacter> ENDEC = StructEndecBuilder.of(
-            CharacterStorage.Character.ENDEC.listOf().fieldOf("choices", S2CPickCharacter::choices), S2CPickCharacter::new
+            CharacterStorage.Character.ENDEC.listOf().fieldOf("choices", S2CPickCharacter::choices),
+            S2CPickCharacter::new
         );
 
         @Override
@@ -209,6 +237,32 @@ public class CharacterHandler {
         public static final C2SOpenCharacterSwitcher INSTANCE = new C2SOpenCharacterSwitcher();
         public static final Type<C2SOpenCharacterSwitcher> TYPE = new Type<>(Characteristic.id("request_character_switcher"));
         public static final Endec<C2SOpenCharacterSwitcher> ENDEC = Endec.unit(INSTANCE);
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record S2CUpdateCharacterChoices(List<CharacterStorage.Character> choices) implements CustomPacketPayload {
+        public static final Type<S2CUpdateCharacterChoices> TYPE = new Type<>(Characteristic.id("update_character_choices"));
+        public static final Endec<S2CUpdateCharacterChoices> ENDEC = StructEndecBuilder.of(
+            CharacterStorage.Character.ENDEC.listOf().fieldOf("choices", S2CUpdateCharacterChoices::choices),
+            S2CUpdateCharacterChoices::new
+        );
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    public record C2SEditCharacter(CharacterStorage.Character character) implements CustomPacketPayload {
+        public static final Type<C2SEditCharacter> TYPE = new Type<>(Characteristic.id("edit_character"));
+        public static final Endec<C2SEditCharacter> ENDEC = StructEndecBuilder.of(
+            CharacterStorage.Character.ENDEC.fieldOf("edited", C2SEditCharacter::character),
+            C2SEditCharacter::new
+        );
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
