@@ -1,22 +1,18 @@
 package com.chyzman.characteristic.cca;
 
+import com.chyzman.characteristic.api.Character;
 import com.mojang.authlib.GameProfile;
-import io.wispforest.endec.Endec;
 import io.wispforest.endec.impl.BuiltInEndecs;
 import io.wispforest.endec.impl.KeyedEndec;
-import io.wispforest.endec.impl.StructEndecBuilder;
 import io.wispforest.owo.Owo;
 import io.wispforest.owo.mixin.ServerCommonPacketListenerImplAccessor;
-import io.wispforest.owo.serialization.CodecUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.Connection;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
-import net.minecraft.util.ExtraCodecs;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.scores.Scoreboard;
@@ -128,8 +124,13 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
     }
 
     @Nullable
-    public Character getCharacter(GameProfile profile) {
-        return characters.get(currentCharacters.get(profile.id()));
+    public Character getCharacterFromCharacter(UUID id) {
+        return characters.get(id);
+    }
+
+    @Nullable
+    public Character getCharacterFromPlayer(UUID id) {
+        return getCharacterFromCharacter(currentCharacters.get(id));
     }
 
     public void setCharacter(UUID target, UUID character) {
@@ -155,56 +156,6 @@ public class CharacterStorage implements Component, AutoSyncedComponent {
     @Nullable
     public GameProfile getControllingProfile(ServerPlayer player) {
         return getControllingProfile(player.connection);
-    }
-
-    public static class Character {
-        private final GameProfile profile;
-        private final UUID owner;
-
-        //region ENDEC STUFF
-
-        public static final Endec<Character> ENDEC = StructEndecBuilder.of(
-            CodecUtils.toEndec(ExtraCodecs.STORED_GAME_PROFILE.codec()).fieldOf("profile", s -> s.profile),
-            BuiltInEndecs.UUID.fieldOf("owner", s -> s.owner),
-            Character::new
-        );
-
-        public Character(GameProfile profile, UUID owner) {
-            this.profile = profile;
-            this.owner = owner;
-        }
-
-        //endregion
-
-        //region GETTERS AND SETTERS
-
-        public GameProfile profile() {
-            return profile;
-        }
-
-        public UUID id() {
-            return profile.id();
-        }
-
-        public String name() {
-            return profile.name();
-        }
-
-        public UUID owner() {
-            return owner;
-        }
-
-        //endregion
-
-        public static Character forPlayer(GameProfile profile) {
-            return new Character(profile, profile.id());
-        }
-
-        public boolean differencesAreValidEdits(Character other) {
-            if (!this.id().equals(other.id())) return false;
-            if (!this.owner().equals(other.owner())) return false;
-            return true;
-        }
     }
 
     @Override

@@ -1,17 +1,22 @@
 package com.chyzman.characteristic.ui.widget;
 
-import com.chyzman.characteristic.cca.CharacterStorage;
+import com.chyzman.characteristic.Characteristic;
+import com.chyzman.characteristic.api.Character;
+import com.chyzman.characteristic.api.CharacterProperties;
 import com.chyzman.characteristic.network.CharacterHandler;
 import com.chyzman.characteristic.util.BraidUtil;
-import com.mojang.authlib.GameProfile;
-import io.wispforest.owo.braid.core.Alignment;
-import io.wispforest.owo.braid.core.Insets;
-import io.wispforest.owo.braid.core.ListenableValue;
+import io.wispforest.owo.braid.animation.Easing;
+import io.wispforest.owo.braid.core.*;
+import io.wispforest.owo.braid.core.events.FilesDroppedEvent;
 import io.wispforest.owo.braid.framework.BuildContext;
 import io.wispforest.owo.braid.framework.proxy.WidgetState;
 import io.wispforest.owo.braid.framework.widget.StatefulWidget;
 import io.wispforest.owo.braid.framework.widget.Widget;
+import io.wispforest.owo.braid.widgets.SpriteWidget;
+import io.wispforest.owo.braid.widgets.animated.AnimatedAlign;
+import io.wispforest.owo.braid.widgets.animated.AnimatedPadding;
 import io.wispforest.owo.braid.widgets.basic.*;
+import io.wispforest.owo.braid.widgets.button.Clickable;
 import io.wispforest.owo.braid.widgets.button.MessageButton;
 import io.wispforest.owo.braid.widgets.flex.*;
 import io.wispforest.owo.braid.widgets.intents.Actions;
@@ -20,7 +25,8 @@ import io.wispforest.owo.braid.widgets.intents.Interactable;
 import io.wispforest.owo.braid.widgets.intents.ShortcutTrigger;
 import io.wispforest.owo.braid.widgets.label.Label;
 import io.wispforest.owo.braid.widgets.scroll.VerticallyScrollable;
-import io.wispforest.owo.braid.widgets.sharedstate.SharedState;
+import io.wispforest.owo.braid.widgets.stack.Stack;
+import io.wispforest.owo.braid.widgets.stack.StackBase;
 import io.wispforest.owo.braid.widgets.textinput.TextBox;
 import io.wispforest.owo.braid.widgets.textinput.TextEditingController;
 import io.wispforest.owo.braid.widgets.textinput.TextEditingValue;
@@ -31,11 +37,11 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import org.joml.Matrix3x2f;
 
 import java.time.Duration;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class CharacterPicker extends StatefulWidget {
@@ -45,17 +51,20 @@ public class CharacterPicker extends StatefulWidget {
     public static final Component ABORTED = Component.translatable(TRANSLATION + "aborted");
     public static final Component SELECT = Component.translatable(TRANSLATION + "select");
 
-    public static final ListenableValue<List<CharacterStorage.Character>> CHARACTER_CHOICES = new ListenableValue<>(List.of());
+    public static final ListenableValue<List<Character>> CHARACTER_CHOICES = new ListenableValue<>(List.of());
 
     final ClientConfigurationNetworking.Context networkingContext;
-    final List<CharacterStorage.Character> choices;
+    final List<Character> choices;
+    final UUID owner;
 
     public CharacterPicker(
         ClientConfigurationNetworking.Context networkingContext,
-        List<CharacterStorage.Character> choices
+        List<Character> choices,
+        UUID owner
     ) {
         this.networkingContext = networkingContext;
         this.choices = choices;
+        this.owner = owner;
     }
 
     @Override
@@ -64,10 +73,16 @@ public class CharacterPicker extends StatefulWidget {
     }
 
     public static class State extends WidgetState<CharacterPicker> {
-        private List<CharacterStorage.Character> choices;
-        private boolean madeSelection;
-        private CharacterStorage.Character selected;
-        private TextEditingController nameInput = new TextEditingController();
+        private List<Character> choices;
+        private boolean waitingForServer;
+        private Character selected;
+        private CharacterProperties selectedProperties;
+
+        private boolean editing;
+        private Character editingCharacter;
+        private CharacterProperties editingProperties;
+        private final TextEditingController nameInput = new TextEditingController();
+        private final TextEditingController bioInput = new TextEditingController();
 
         private final Runnable choicesListener = () -> setState(() -> updateChoices(CHARACTER_CHOICES.value()));
 
@@ -75,6 +90,12 @@ public class CharacterPicker extends StatefulWidget {
         public void init() {
             updateChoices(widget().choices);
             CHARACTER_CHOICES.addListener(choicesListener);
+            nameInput.addListener(() -> {
+                if (editingCharacter != null) setState(() -> editingCharacter = editingCharacter.name(nameInput.value().text()));
+            });
+            bioInput.addListener(() -> {
+                if (editingCharacter != null) setState(() -> editingProperties.put(CharacterProperties.BIO_KEY, bioInput.value().text()));
+            });
         }
 
         @Override
@@ -82,22 +103,34 @@ public class CharacterPicker extends StatefulWidget {
             CHARACTER_CHOICES.removeListener(choicesListener);
         }
 
-        private void select(CharacterStorage.Character character) {
+        private void updateChoices(List<Character> newChoices) {
+            waitingForServer = false;
+            choices = sort(newChoices);
+            if (selected != null) select(choices.stream().filter(c -> c.id().equals(selected.id())).findFirst().orElse(null));
+        }
+
+        private void select(Character character) {
             selected = character;
+            selectedProperties = selected != null ? CharacterProperties.fromProfile(selected.profile) : null;
+            if (!canEdit()) editing = false;
+            editingCharacter = selected != null ? new Character(selected) : null;
+            editingProperties = selected != null ? CharacterProperties.fromProfile(selected.profile) : null;
             var newName = selected != null ? selected.name() : "";
             nameInput.setValue(new TextEditingValue(newName, TextSelection.collapsed(newName.length())));
+            var newBio = editingProperties != null ? editingProperties.get(CharacterProperties.BIO_KEY) : "";
+            bioInput.setValue(new TextEditingValue(newBio, TextSelection.collapsed(newBio.length())));
         }
 
-        private void updateChoices(List<CharacterStorage.Character> newChoices) {
-            choices = sort(newChoices);
-            if (selected != null) {
-                selected = choices.stream().filter(c -> c.id().equals(selected.id())).findFirst().orElse(null);
-                select(selected);
-            }
+        private List<Character> sort(List<Character> characters) {
+            return characters.stream().sorted(Comparator.comparing(Character::name)).toList();
         }
 
-        private List<CharacterStorage.Character> sort(List<CharacterStorage.Character> characters) {
-            return characters.stream().sorted(Comparator.comparing(CharacterStorage.Character::name)).toList();
+        private boolean unsavedChanges() {
+            return editing && (!Objects.equals(selected, editingCharacter) || !Objects.equals(selectedProperties, editingProperties));
+        }
+
+        private boolean canEdit() {
+            return selected != null && selected.owner.equals(widget().owner);
         }
 
         @Override
@@ -109,7 +142,7 @@ public class CharacterPicker extends StatefulWidget {
             shortcuts.put(List.of(BraidUtil.ENTER), new PickSelectedCharacterIntent());
             return new Center(
                 new Interactable(
-                    madeSelection ? Map.of() : shortcuts,
+                    waitingForServer || unsavedChanges() ? Map.of() : shortcuts,
                     widget -> widget.autoFocus(true).addCallbackAction(
                         SelectCharacterIntent.class,
                         (actionContext, intent) -> {
@@ -118,7 +151,7 @@ public class CharacterPicker extends StatefulWidget {
                     ).addCallbackAction(
                         PickSelectedCharacterIntent.class, (actionContext, intent) -> {
                             if (selected != null) {
-                                setState(() -> madeSelection = true);
+                                setState(() -> waitingForServer = true);
                                 widget().networkingContext.responseSender().sendPacket(new CharacterHandler.C2SPickCharacter(selected.id()));
                             }
                         }
@@ -133,90 +166,178 @@ public class CharacterPicker extends StatefulWidget {
                                 new Label(TITLE)
                             )
                         ),
-                        new ControlsOverride(
-                            madeSelection,
-                            new Flexible(
-                                new Panel(
-                                    Panel.VANILLA_LIGHT,
-                                    new Padding(
-                                        Insets.all(6),
-                                        new Row(
-                                            new Panel(
-                                                Panel.VANILLA_INSET,
-                                                new Padding(
-                                                    Insets.all(1),
-                                                    new VerticallyScrollable(
-                                                        new IntrinsicWidth(
-                                                            new Column(
-                                                                MainAxisAlignment.START,
-                                                                CrossAxisAlignment.CENTER,
-                                                                choices.stream()
-                                                                    .map(character ->
-                                                                        new MessageButton(
-                                                                            Component.literal(character.name()),
-                                                                            !character.equals(selected),
-                                                                            () -> setState(() -> select(character))
-                                                                        )).toList()
-                                                            )
-                                                        )
-                                                    )
-                                                )
-                                            ),
-                                            new Padding(Insets.all(2)),
-                                            selected == null ?
-                                                new Label(SELECT) :
-                                                new Column(
-                                                    MainAxisAlignment.START,
-                                                    CrossAxisAlignment.CENTER,
-                                                    new Sized(
-                                                        null, 16,
-                                                        new Row(
-                                                            new Sized(
-                                                                100, null,
+                        new Flexible(
+                            new Stack(
+                                new Align(
+                                    Alignment.BOTTOM_RIGHT,
+                                    new GliscoHatesMeAnimatedAlign(
+                                        canEdit() ? Duration.ofSeconds(1) : Duration.ofMillis(250),
+                                        Easing.IN_OUT_CUBIC,
+                                        editing ? Alignment.of(3, 1) : Alignment.BOTTOM_RIGHT,
+                                        1.5, null,
+                                        new Padding(
+                                            Insets.vertical(4),
+                                            new Padding(
+                                                Insets.left(-10),
+                                                new ControlsOverride(
+                                                    waitingForServer || selected == null,
+                                                    new Stack(
+                                                        Alignment.BOTTOM_RIGHT,
+                                                        new StackBase(
+                                                            new Panel(
+                                                                Panel.VANILLA_LIGHT,
                                                                 new Actions(
                                                                     widget -> widget
-                                                                        .focusable(false)
+                                                                        .focusable(true)
                                                                         .skipTraversal(true)
                                                                         .addCallbackAction(SelectCharacterIntent.class, (actionContext, intent) -> {})
                                                                         .addCallbackAction(PickSelectedCharacterIntent.class, (actionContext, intent) -> {}),
-                                                                    new TextBox(
-                                                                        nameInput,
-                                                                        //TODO: validate name input
-                                                                        widget -> widget.singleLine()
+                                                                    new Padding(
+                                                                        Insets.all(4).withLeft(13),
+                                                                        new Column(
+                                                                            new VerticallyScrollable(
+                                                                                new Column(
+                                                                                    new Sized(
+                                                                                        100, 16,
+                                                                                        new TextBox(
+                                                                                            nameInput,
+                                                                                            //TODO: validate name input
+                                                                                            widget -> widget.singleLine()
+                                                                                        )
+                                                                                    ),
+                                                                                    new Sized(
+                                                                                        100, null,
+                                                                                        new TextBox(
+                                                                                            bioInput,
+                                                                                            //TODO: validate bio
+                                                                                            widget -> {}
+                                                                                        )
+                                                                                    )
+                                                                                )
+                                                                            ),
+                                                                            new Row(
+                                                                                new MessageButton(
+                                                                                    //TODO: translate
+                                                                                    Component.literal("save"),
+                                                                                    unsavedChanges(),
+                                                                                    () -> {
+                                                                                        setState(() -> waitingForServer = true);
+                                                                                        editingProperties.applyToProfile(editingCharacter.profile);
+                                                                                        widget().networkingContext
+                                                                                            .responseSender()
+                                                                                            .sendPacket(new CharacterHandler.C2SEditCharacter(editingCharacter));
+                                                                                    }
+                                                                                ),
+                                                                                new MessageButton(
+                                                                                    //TODO: translate
+                                                                                    Component.literal("cancel"),
+                                                                                    unsavedChanges(),
+                                                                                    () -> setState(() -> select(selected))
+                                                                                )
+                                                                            )
+                                                                        )
                                                                     )
                                                                 )
-                                                            ),
-                                                            new MessageButton(
-                                                                Component.literal("e"),
-                                                                () -> {
-                                                                    var modified = new CharacterStorage.Character(
-                                                                        new GameProfile(selected.id(), nameInput.value().text(), selected.profile().properties()),
-                                                                        selected.owner()
-                                                                    );
-                                                                    widget().networkingContext.responseSender().sendPacket(new CharacterHandler.C2SEditCharacter(modified));
-                                                                }
+                                                            )
+                                                        ),
+                                                        new Align(
+                                                            Alignment.BOTTOM_RIGHT,
+                                                            new GliscoHatesMeAnimatedAlign(
+                                                                canEdit() ? Duration.ofMillis(500) : Duration.ofMillis(250),
+                                                                Easing.IN_OUT_CUBIC,
+                                                                canEdit() ? Alignment.of(5, 1) : Alignment.BOTTOM_RIGHT,
+                                                                1.25, null,
+                                                                new Padding(
+                                                                    Insets.left(-3),
+                                                                    new Stack(
+                                                                        new SpriteWidget(
+                                                                            Characteristic.id("edit_tab")
+                                                                        ),
+                                                                        new Padding(
+                                                                            Insets.left(1),
+                                                                            new Sized(
+                                                                                Size.square(10),
+                                                                                new Clickable(
+                                                                                    () -> {
+                                                                                        setState(() -> editing = !editing);
+                                                                                        return true;
+                                                                                    },
+                                                                                    new SpriteWidget(
+                                                                                        Characteristic.id("jerry")
+                                                                                    )
+                                                                                )
+                                                                            )
+                                                                        )
+                                                                    )
+                                                                )
                                                             )
                                                         )
-
-                                                    ),
-                                                    new Sized(
-                                                        100, 200,
-                                                        new CursedCharacterWidget(
-                                                            1,
-                                                            selected,
-                                                            widget -> widget.displayMode(CursedCharacterWidget.DisplayMode.CURSOR)
-                                                        )
-                                                    ),
-                                                    new MessageButton(
-                                                        SELECT,
-                                                        () -> {
-                                                            setState(() -> madeSelection = true);
-                                                            widget().networkingContext
-                                                                .responseSender()
-                                                                .sendPacket(new CharacterHandler.C2SPickCharacter(selected.id()));
-                                                        }
                                                     )
                                                 )
+                                            )
+                                        )
+                                    )
+                                ),
+                                new ControlsOverride(
+                                    waitingForServer || unsavedChanges(),
+                                    new StackBase(
+//                                            new Box(
+//                                                Color.RED,
+//                                                true,
+                                        new Panel(
+                                            Panel.VANILLA_LIGHT,
+                                            new HitTestTrap(
+                                                new Padding(
+                                                    Insets.all(6),
+                                                    new Row(
+                                                        new Panel(
+                                                            Panel.VANILLA_INSET,
+                                                            new Padding(
+                                                                Insets.all(1),
+                                                                new VerticallyScrollable(
+                                                                    new IntrinsicWidth(
+                                                                        new Column(
+                                                                            MainAxisAlignment.START,
+                                                                            CrossAxisAlignment.CENTER,
+                                                                            choices.stream()
+                                                                                .map(character ->
+                                                                                    new MessageButton(
+                                                                                        Component.literal(character.name()),
+                                                                                        !character.equals(selected),
+                                                                                        () -> setState(() -> select(character))
+                                                                                    )).toList()
+                                                                        )
+                                                                    )
+                                                                )
+                                                            )
+                                                        ),
+                                                        new Padding(Insets.all(2)),
+                                                        selected == null
+                                                            ? new Label(SELECT)
+                                                            : new Column(
+                                                                MainAxisAlignment.START,
+                                                                CrossAxisAlignment.CENTER,
+                                                                new Sized(
+                                                                    100, 200,
+                                                                    new CursedCharacterWidget(
+                                                                        1,
+                                                                        selected,
+                                                                        widget -> widget.displayMode(CursedCharacterWidget.DisplayMode.CURSOR)
+                                                                    )
+                                                                ),
+                                                                new MessageButton(
+                                                                    SELECT,
+                                                                    () -> {
+                                                                        setState(() -> waitingForServer = true);
+                                                                        widget().networkingContext
+                                                                            .responseSender()
+                                                                            .sendPacket(new CharacterHandler.C2SPickCharacter(selected.id()));
+                                                                    }
+                                                                )
+                                                            )
+                                                    )
+                                                )
+                                            )
                                         )
                                     )
                                 )
@@ -233,7 +354,7 @@ public class CharacterPicker extends StatefulWidget {
                                         new MessageButton(
                                             CommonComponents.GUI_DISCONNECT,
                                             () -> {
-                                                setState(() -> madeSelection = true);
+                                                setState(() -> waitingForServer = true);
                                                 widget().networkingContext.responseSender().disconnect(CharacterPicker.ABORTED);
                                                 Minecraft.getInstance().setScreen(null);
                                             }

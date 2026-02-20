@@ -1,8 +1,8 @@
 package com.chyzman.characteristic.command.argument;
 
+import com.chyzman.characteristic.api.Character;
 import com.chyzman.characteristic.cca.CharacterStorage;
 import com.google.gson.JsonObject;
-import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -68,7 +68,7 @@ public class CharacterArgument extends NameArgument {
         if (type == Type.UNIQUE) return builder.buildFuture();
         var storage = CharacterStorage.get();
         if (storage == null) return CompletableFuture.completedFuture(builder.build());
-        SharedSuggestionProvider.suggest(storage.allCharacters().values().stream().map(CharacterStorage.Character::name), builder);
+        SharedSuggestionProvider.suggest(storage.allCharacters().values().stream().map(Character::name), builder);
         return builder.buildFuture();
     }
 

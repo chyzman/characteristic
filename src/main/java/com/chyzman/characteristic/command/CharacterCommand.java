@@ -99,7 +99,7 @@ public class CharacterCommand {
                                         () -> Component.literal(
                                             character.name() + "\n" +
                                             character.id() + "\n" +
-                                            character.owner()
+                                            character.owner
                                         ), false
                                     ));
                                     return 1;

@@ -5,9 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.Connection;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
-import net.minecraft.server.players.NameAndId;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -29,8 +27,8 @@ public abstract class ServerCommonPacketListenerImplMixin {
         var profile = original.call(instance);
         var storage = CharacterStorage.get();
         if (storage == null) return profile;
-        var character = storage.getCharacter(storage.connections.getOrDefault(connection, profile));
-        return character == null ? profile : character.profile();
+        var character = storage.getCharacterFromPlayer(storage.connections.getOrDefault(connection, profile).id());
+        return character == null ? profile : character.profile;
     }
 
 //    @WrapOperation(method = "isSingleplayerOwner", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;isSingleplayerOwner(Lnet/minecraft/server/players/NameAndId;)Z"))

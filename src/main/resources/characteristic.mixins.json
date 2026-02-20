@@ -6,13 +6,17 @@
   "mixins": [
     "CCASkillIssueMixin",
     "MinecraftProfileTextureMixin",
+    "PlayerDataStorageMixin",
     "PlayerListMixin",
     "PlayerSkinMixin",
+    "PropertyMapMixin",
     "ServerCommonPacketListenerImplMixin",
+    "ServerConfigurationPacketListenerImplMixin",
     "ServerLoginPacketListenerImplMixin",
     "TextureUrlCheckerMixin"
   ],
   "client": [
+    "client.IntegratedPlayerListMixin",
     "client.IntegratedServerMixin",
     "client.PauseScreenMixin",
     "client.SkinTextureDownloaderMixin",

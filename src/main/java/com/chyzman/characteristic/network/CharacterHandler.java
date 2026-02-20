@@ -1,6 +1,7 @@
 package com.chyzman.characteristic.network;
 
 import com.chyzman.characteristic.Characteristic;
+import com.chyzman.characteristic.api.Character;
 import com.chyzman.characteristic.cca.CharacterStorage;
 import com.chyzman.characteristic.mixin.client.access.ClientConfigurationPacketListenerImplAccessor;
 import com.chyzman.characteristic.ui.CharacteristicConfigurationScreen;
@@ -14,7 +15,6 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.*;
-import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -49,10 +49,11 @@ public class CharacterHandler {
             if (storage == null) return;
             var target = storage.getControllingProfile(handler);
             if (target == null) return;
-            if (!storage.currentCharacters().containsKey(target.id())) {
+            //TODO: somehow make the current character for each account be the first logged in one instead of the last
+            if (!storage.currentCharacters().containsKey(target.id()) || server.getPlayerList().getPlayer(storage.currentCharacters().get(target.id())) != null) {
                 //TODO: filter choices once we actually make permission stuff
                 var choices = storage.allCharacters().values().stream().toList();
-                handler.addTask(new PickCharacterTask(choices));
+                handler.addTask(new PickCharacterTask(choices, target.id()));
             }
             handler.addTask(new SwapProfileTask(target));
         });
@@ -99,7 +100,8 @@ public class CharacterHandler {
                     if (target != null) {
                         var character = storage.allCharacters().get(payload.character.id());
                         if (character != null) {
-                            if (character.differencesAreValidEdits(payload.character)) storage.modifyCharacter(payload.character);
+                            var permission = character.permissions.getOrDefault(target.id(), null);
+                            if (character.differencesAreValidEdits(payload.character, permission)) storage.modifyCharacter(payload.character);
                         }
                     }
                 }
@@ -124,7 +126,7 @@ public class CharacterHandler {
             (payload, context) -> context.client().schedule(() -> {
                 var client = context.client();
                 client.setScreen(
-                    new CharacteristicConfigurationScreen(client.screen, new CharacterPicker(context, payload.choices)));
+                    new CharacteristicConfigurationScreen(client.screen, new CharacterPicker(context, payload.choices, payload.owner)));
             })
         );
 
@@ -149,9 +151,7 @@ public class CharacterHandler {
                 var id = storage.currentCharacters().getOrDefault(profile.id(), profile.id());
                 if (id != null) {
                     var character = storage.allCharacters().get(id);
-                    if (character != null) {
-                        target = character.profile();
-                    }
+                    if (character != null) target = character.profile;
                 }
             }
             consumer.accept(ServerConfigurationNetworking.createS2CPacket(new S2CSwapProfile(target)));
@@ -193,12 +193,12 @@ public class CharacterHandler {
 
     private static final Identifier PICK_CHARACTER = Characteristic.id("pick_character");
 
-    public record PickCharacterTask(List<CharacterStorage.Character> choices) implements ConfigurationTask {
+    public record PickCharacterTask(List<Character> choices, UUID owner) implements ConfigurationTask {
         public static final ConfigurationTask.Type TYPE = new ConfigurationTask.Type(PICK_CHARACTER.toString());
 
         @Override
         public void start(@NonNull Consumer<Packet<?>> consumer) {
-            consumer.accept(ServerConfigurationNetworking.createS2CPacket(new S2CPickCharacter(choices)));
+            consumer.accept(ServerConfigurationNetworking.createS2CPacket(new S2CPickCharacter(choices, owner)));
         }
 
         @Override
@@ -207,10 +207,11 @@ public class CharacterHandler {
         }
     }
 
-    public record S2CPickCharacter(List<CharacterStorage.Character> choices) implements CustomPacketPayload {
+    public record S2CPickCharacter(List<Character> choices, UUID owner) implements CustomPacketPayload {
         public static final Type<S2CPickCharacter> TYPE = new Type<>(PICK_CHARACTER);
         public static final Endec<S2CPickCharacter> ENDEC = StructEndecBuilder.of(
-            CharacterStorage.Character.ENDEC.listOf().fieldOf("choices", S2CPickCharacter::choices),
+            Character.ENDEC.listOf().fieldOf("choices", S2CPickCharacter::choices),
+            BuiltInEndecs.UUID.fieldOf("owner", S2CPickCharacter::owner),
             S2CPickCharacter::new
         );
 
@@ -244,10 +245,10 @@ public class CharacterHandler {
         }
     }
 
-    public record S2CUpdateCharacterChoices(List<CharacterStorage.Character> choices) implements CustomPacketPayload {
+    public record S2CUpdateCharacterChoices(List<Character> choices) implements CustomPacketPayload {
         public static final Type<S2CUpdateCharacterChoices> TYPE = new Type<>(Characteristic.id("update_character_choices"));
         public static final Endec<S2CUpdateCharacterChoices> ENDEC = StructEndecBuilder.of(
-            CharacterStorage.Character.ENDEC.listOf().fieldOf("choices", S2CUpdateCharacterChoices::choices),
+            Character.ENDEC.listOf().fieldOf("choices", S2CUpdateCharacterChoices::choices),
             S2CUpdateCharacterChoices::new
         );
 
@@ -257,10 +258,10 @@ public class CharacterHandler {
         }
     }
 
-    public record C2SEditCharacter(CharacterStorage.Character character) implements CustomPacketPayload {
+    public record C2SEditCharacter(Character character) implements CustomPacketPayload {
         public static final Type<C2SEditCharacter> TYPE = new Type<>(Characteristic.id("edit_character"));
         public static final Endec<C2SEditCharacter> ENDEC = StructEndecBuilder.of(
-            CharacterStorage.Character.ENDEC.fieldOf("edited", C2SEditCharacter::character),
+            Character.ENDEC.fieldOf("edited", C2SEditCharacter::character),
             C2SEditCharacter::new
         );
 

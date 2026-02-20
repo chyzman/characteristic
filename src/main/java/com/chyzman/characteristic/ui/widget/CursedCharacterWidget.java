@@ -1,6 +1,6 @@
 package com.chyzman.characteristic.ui.widget;
 
-import com.chyzman.characteristic.cca.CharacterStorage;
+import com.chyzman.characteristic.api.Character;
 import com.mojang.math.Axis;
 import io.wispforest.owo.braid.core.BraidGraphics;
 import io.wispforest.owo.braid.core.Constraints;
@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 public class CursedCharacterWidget extends LeafInstanceWidget {
 
     public final double scale;
-    public final CharacterStorage.Character character;
+    public final Character character;
     public final AvatarRenderState renderState = new AvatarRenderState();
 
     protected DisplayMode displayMode = DisplayMode.FIXED;
@@ -31,7 +31,7 @@ public class CursedCharacterWidget extends LeafInstanceWidget {
     protected boolean showNametag = false;
     protected @Nullable Consumer<Matrix4f> transform = null;
 
-    public CursedCharacterWidget(double scale, CharacterStorage.Character character, @Nullable WidgetSetupCallback<CursedCharacterWidget> setupCallback) {
+    public CursedCharacterWidget(double scale, Character character, @Nullable WidgetSetupCallback<CursedCharacterWidget> setupCallback) {
         this.scale = scale;
         this.character = character;
         renderState.boundingBoxWidth = Avatar.DEFAULT_BB_WIDTH;
@@ -49,7 +49,7 @@ public class CursedCharacterWidget extends LeafInstanceWidget {
         renderState.mainArm = options.mainHand().get();
         renderState.showExtraEars = "deadmau5".equals(character.name());
         renderState.isUpsideDown = "Dinnerbone".equals(character.name()) || "Grumm".equals(character.name());
-        Minecraft.getInstance().getSkinManager().get(character.profile()).thenAccept(playerSkin -> playerSkin.ifPresent((skin) -> renderState.skin = skin));
+        Minecraft.getInstance().getSkinManager().get(character.profile).thenAccept(playerSkin -> playerSkin.ifPresent((skin) -> renderState.skin = skin));
 
         if (setupCallback != null) setupCallback.setup(this);
     }

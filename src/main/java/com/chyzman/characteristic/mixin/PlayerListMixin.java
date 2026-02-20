@@ -6,10 +6,13 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
+
+    @Unique private static boolean usedSinglePlayerData = false;
 
     @WrapOperation(
         method = "loadPlayerData",
@@ -18,7 +21,9 @@ public abstract class PlayerListMixin {
             target = "Lnet/minecraft/server/MinecraftServer;isSingleplayerOwner(Lnet/minecraft/server/players/NameAndId;)Z"
         )
     )
-    private static boolean useActualOwner(MinecraftServer instance, NameAndId nameAndId, Operation<Boolean> original) {
-        return instance.getSingleplayerProfile() != null && nameAndId.name().equalsIgnoreCase(instance.getSingleplayerProfile().name());
+    private static boolean onlyUseSinglePlayerDataOnce(MinecraftServer instance, NameAndId nameAndId, Operation<Boolean> original) {
+        var returned = usedSinglePlayerData && original.call(instance, nameAndId);
+        usedSinglePlayerData = true;
+        return returned;
     }
 }
