@@ -2,27 +2,21 @@ package com.chyzman.characteristic.ui.widget;
 
 import com.chyzman.characteristic.Characteristic;
 import com.chyzman.characteristic.api.Character;
-import com.chyzman.characteristic.api.CharacterProperties;
 import com.chyzman.characteristic.network.CharacterHandler;
 import com.chyzman.characteristic.util.BraidUtil;
+import com.ibm.icu.lang.CharacterProperties;
 import io.wispforest.owo.braid.animation.Easing;
 import io.wispforest.owo.braid.core.*;
-import io.wispforest.owo.braid.core.events.FilesDroppedEvent;
 import io.wispforest.owo.braid.framework.BuildContext;
 import io.wispforest.owo.braid.framework.proxy.WidgetState;
 import io.wispforest.owo.braid.framework.widget.StatefulWidget;
 import io.wispforest.owo.braid.framework.widget.Widget;
 import io.wispforest.owo.braid.widgets.SpriteWidget;
-import io.wispforest.owo.braid.widgets.animated.AnimatedAlign;
-import io.wispforest.owo.braid.widgets.animated.AnimatedPadding;
 import io.wispforest.owo.braid.widgets.basic.*;
 import io.wispforest.owo.braid.widgets.button.Clickable;
 import io.wispforest.owo.braid.widgets.button.MessageButton;
 import io.wispforest.owo.braid.widgets.flex.*;
-import io.wispforest.owo.braid.widgets.intents.Actions;
-import io.wispforest.owo.braid.widgets.intents.Intent;
-import io.wispforest.owo.braid.widgets.intents.Interactable;
-import io.wispforest.owo.braid.widgets.intents.ShortcutTrigger;
+import io.wispforest.owo.braid.widgets.intents.*;
 import io.wispforest.owo.braid.widgets.label.Label;
 import io.wispforest.owo.braid.widgets.scroll.VerticallyScrollable;
 import io.wispforest.owo.braid.widgets.stack.Stack;
@@ -37,11 +31,10 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.Identifier;
-import org.joml.Matrix3x2f;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class CharacterPicker extends StatefulWidget {
@@ -76,13 +69,10 @@ public class CharacterPicker extends StatefulWidget {
         private List<Character> choices;
         private boolean waitingForServer;
         private Character selected;
-        private CharacterProperties selectedProperties;
 
         private boolean editing;
         private Character editingCharacter;
-        private CharacterProperties editingProperties;
         private final TextEditingController nameInput = new TextEditingController();
-        private final TextEditingController bioInput = new TextEditingController();
 
         private final Runnable choicesListener = () -> setState(() -> updateChoices(CHARACTER_CHOICES.value()));
 
@@ -92,9 +82,6 @@ public class CharacterPicker extends StatefulWidget {
             CHARACTER_CHOICES.addListener(choicesListener);
             nameInput.addListener(() -> {
                 if (editingCharacter != null) setState(() -> editingCharacter = editingCharacter.name(nameInput.value().text()));
-            });
-            bioInput.addListener(() -> {
-                if (editingCharacter != null) setState(() -> editingProperties.put(CharacterProperties.BIO_KEY, bioInput.value().text()));
             });
         }
 
@@ -111,14 +98,10 @@ public class CharacterPicker extends StatefulWidget {
 
         private void select(Character character) {
             selected = character;
-            selectedProperties = selected != null ? CharacterProperties.fromProfile(selected.profile) : null;
             if (!canEdit()) editing = false;
             editingCharacter = selected != null ? new Character(selected) : null;
-            editingProperties = selected != null ? CharacterProperties.fromProfile(selected.profile) : null;
             var newName = selected != null ? selected.name() : "";
             nameInput.setValue(new TextEditingValue(newName, TextSelection.collapsed(newName.length())));
-            var newBio = editingProperties != null ? editingProperties.get(CharacterProperties.BIO_KEY) : "";
-            bioInput.setValue(new TextEditingValue(newBio, TextSelection.collapsed(newBio.length())));
         }
 
         private List<Character> sort(List<Character> characters) {
@@ -126,7 +109,7 @@ public class CharacterPicker extends StatefulWidget {
         }
 
         private boolean unsavedChanges() {
-            return editing && (!Objects.equals(selected, editingCharacter) || !Objects.equals(selectedProperties, editingProperties));
+            return editing && (!Objects.equals(selected, editingCharacter));
         }
 
         private boolean canEdit() {
@@ -139,7 +122,7 @@ public class CharacterPicker extends StatefulWidget {
                 .stream()
                 .limit(choices.size())
                 .collect(Collectors.toMap(List::of, trigger -> new SelectCharacterIntent(BraidUtil.NUMBERS.indexOf(trigger))));
-            shortcuts.put(List.of(BraidUtil.ENTER), new PickSelectedCharacterIntent());
+            if (selected != null) shortcuts.put(List.of(BraidUtil.ENTER), new PickCharacterIntent(selected::id));
             return new Center(
                 new Interactable(
                     waitingForServer || unsavedChanges() ? Map.of() : shortcuts,
@@ -149,10 +132,10 @@ public class CharacterPicker extends StatefulWidget {
                             if (intent.index < choices.size()) setState(() -> select(choices.get(intent.index())));
                         }
                     ).addCallbackAction(
-                        PickSelectedCharacterIntent.class, (actionContext, intent) -> {
+                        PickCharacterIntent.class, (actionContext, intent) -> {
                             if (selected != null) {
                                 setState(() -> waitingForServer = true);
-                                widget().networkingContext.responseSender().sendPacket(new CharacterHandler.C2SPickCharacter(selected.id()));
+                                widget().networkingContext.responseSender().sendPacket(new CharacterHandler.C2SPickCharacter(intent.character().get()));
                             }
                         }
                     ),
@@ -191,7 +174,7 @@ public class CharacterPicker extends StatefulWidget {
                                                                         .focusable(true)
                                                                         .skipTraversal(true)
                                                                         .addCallbackAction(SelectCharacterIntent.class, (actionContext, intent) -> {})
-                                                                        .addCallbackAction(PickSelectedCharacterIntent.class, (actionContext, intent) -> {}),
+                                                                        .addCallbackAction(PickCharacterIntent.class, (actionContext, intent) -> {}),
                                                                     new Padding(
                                                                         Insets.all(4).withLeft(13),
                                                                         new Column(
@@ -204,14 +187,6 @@ public class CharacterPicker extends StatefulWidget {
                                                                                             //TODO: validate name input
                                                                                             widget -> widget.singleLine()
                                                                                         )
-                                                                                    ),
-                                                                                    new Sized(
-                                                                                        100, null,
-                                                                                        new TextBox(
-                                                                                            bioInput,
-                                                                                            //TODO: validate bio
-                                                                                            widget -> {}
-                                                                                        )
                                                                                     )
                                                                                 )
                                                                             ),
@@ -222,7 +197,6 @@ public class CharacterPicker extends StatefulWidget {
                                                                                     unsavedChanges(),
                                                                                     () -> {
                                                                                         setState(() -> waitingForServer = true);
-                                                                                        editingProperties.applyToProfile(editingCharacter.profile);
                                                                                         widget().networkingContext
                                                                                             .responseSender()
                                                                                             .sendPacket(new CharacterHandler.C2SEditCharacter(editingCharacter));
@@ -300,12 +274,24 @@ public class CharacterPicker extends StatefulWidget {
                                                                             MainAxisAlignment.START,
                                                                             CrossAxisAlignment.CENTER,
                                                                             choices.stream()
-                                                                                .map(character ->
-                                                                                    new MessageButton(
+                                                                                .map(character -> {
+                                                                                    var button = new MessageButton(
                                                                                         Component.literal(character.name()),
                                                                                         !character.equals(selected),
                                                                                         () -> setState(() -> select(character))
-                                                                                    )).toList()
+                                                                                    );
+                                                                                    return !character.equals(selected)
+                                                                                        ? new Interactable(
+                                                                                        Map.of(
+                                                                                            List.of(ShortcutTrigger.LEFT_CLICK, ShortcutTrigger.LEFT_CLICK),
+                                                                                            new PickCharacterIntent(
+                                                                                                character::id)
+                                                                                        ),
+                                                                                        widget -> widget.skipTraversal(true),
+                                                                                        button
+                                                                                    )
+                                                                                        : button;
+                                                                                }).toList()
                                                                         )
                                                                     )
                                                                 )
@@ -371,6 +357,6 @@ public class CharacterPicker extends StatefulWidget {
 
     public record SelectCharacterIntent(int index) implements Intent {}
 
-    public record PickSelectedCharacterIntent() implements Intent {}
+    public record PickCharacterIntent(Supplier<UUID> character) implements Intent {}
 
 }

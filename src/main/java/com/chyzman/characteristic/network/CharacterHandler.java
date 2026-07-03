@@ -3,6 +3,7 @@ package com.chyzman.characteristic.network;
 import com.chyzman.characteristic.Characteristic;
 import com.chyzman.characteristic.api.Character;
 import com.chyzman.characteristic.cca.CharacterStorage;
+import com.chyzman.characteristic.client.CharacteristicClient;
 import com.chyzman.characteristic.mixin.client.access.ClientConfigurationPacketListenerImplAccessor;
 import com.chyzman.characteristic.ui.CharacteristicConfigurationScreen;
 import com.chyzman.characteristic.ui.widget.CharacterPicker;
@@ -10,12 +11,14 @@ import com.mojang.authlib.GameProfile;
 import io.wispforest.endec.Endec;
 import io.wispforest.endec.impl.BuiltInEndecs;
 import io.wispforest.endec.impl.StructEndecBuilder;
+import io.wispforest.owo.mixin.ServerCommonPacketListenerImplAccessor;
 import io.wispforest.owo.serialization.CodecUtils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.networking.v1.ClientConfigurationNetworking;
 import net.fabricmc.fabric.api.networking.v1.*;
 import net.minecraft.locale.Language;
+import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -24,8 +27,7 @@ import net.minecraft.server.network.ConfigurationTask;
 import net.minecraft.util.ExtraCodecs;
 import org.jspecify.annotations.NonNull;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Consumer;
 
 public class CharacterHandler {
@@ -33,14 +35,22 @@ public class CharacterHandler {
     public static void init() {
         PayloadTypeRegistry.configurationS2C().register(S2CSwapProfile.TYPE, CodecUtils.toPacketCodec(S2CSwapProfile.ENDEC));
         PayloadTypeRegistry.configurationC2S().register(C2SSwapProfile.TYPE, CodecUtils.toPacketCodec(C2SSwapProfile.ENDEC));
+
         PayloadTypeRegistry.configurationS2C().register(S2CPickCharacter.TYPE, CodecUtils.toPacketCodec(S2CPickCharacter.ENDEC));
         PayloadTypeRegistry.configurationC2S().register(C2SPickCharacter.TYPE, CodecUtils.toPacketCodec(C2SPickCharacter.ENDEC));
         PayloadTypeRegistry.configurationS2C().register(S2CUpdateCharacterChoices.TYPE, CodecUtils.toPacketCodec(S2CUpdateCharacterChoices.ENDEC));
         PayloadTypeRegistry.configurationC2S().register(C2SEditCharacter.TYPE, CodecUtils.toPacketCodec(C2SEditCharacter.ENDEC));
         PayloadTypeRegistry.playC2S().register(C2SOpenCharacterSwitcher.TYPE, CodecUtils.toPacketCodec(C2SOpenCharacterSwitcher.ENDEC));
 
+        PayloadTypeRegistry.configurationS2C().register(S2CCheckSwap.TYPE, CodecUtils.toPacketCodec(S2CCheckSwap.ENDEC));
+        PayloadTypeRegistry.configurationC2S().register(C2SCheckSwap.TYPE, CodecUtils.toPacketCodec(C2SCheckSwap.ENDEC));
+
         ServerConfigurationConnectionEvents.CONFIGURE.register((handler, server) -> {
-            if (!ServerConfigurationNetworking.canSend(handler, S2CPickCharacter.TYPE) || !ServerConfigurationNetworking.canSend(handler, S2CSwapProfile.TYPE))
+            if (
+                !ServerConfigurationNetworking.canSend(handler, S2CPickCharacter.TYPE) ||
+                !ServerConfigurationNetworking.canSend(handler, S2CSwapProfile.TYPE) ||
+                !ServerConfigurationNetworking.canSend(handler, S2CCheckSwap.TYPE)
+            )
                 handler.disconnect(Component.translatableWithFallback(
                     "characteristic.multiplayer.disconnect.missing",
                     Language.getInstance().getOrDefault("multiplayer.disconnect.characteristic.missing")
@@ -49,8 +59,13 @@ public class CharacterHandler {
             if (storage == null) return;
             var target = storage.getControllingProfile(handler);
             if (target == null) return;
+            handler.addTask(new CheckSwapTask());
             //TODO: somehow make the current character for each account be the first logged in one instead of the last
-            if (!storage.currentCharacters().containsKey(target.id()) || server.getPlayerList().getPlayer(storage.currentCharacters().get(target.id())) != null) {
+            if (
+                SWAP_WANTERS.contains(((ServerCommonPacketListenerImplAccessor) handler).owo$getConnection()) ||
+                !storage.currentCharacters().containsKey(target.id()) ||
+                server.getPlayerList().getPlayer(storage.currentCharacters().get(target.id())) != null
+            ) {
                 //TODO: filter choices once we actually make permission stuff
                 var choices = storage.allCharacters().values().stream().toList();
                 handler.addTask(new PickCharacterTask(choices, target.id()));
@@ -109,6 +124,14 @@ public class CharacterHandler {
                 context.responseSender().sendPacket(new S2CUpdateCharacterChoices(storage.allCharacters().values().stream().toList()));
             }
         );
+
+        ServerConfigurationNetworking.registerGlobalReceiver(
+            C2SCheckSwap.TYPE, (payload, context) -> {
+                if (payload.wantsToSwap()) SWAP_WANTERS.add(((ServerCommonPacketListenerImplAccessor) context.networkHandler()).owo$getConnection());
+                else SWAP_WANTERS.remove(((ServerCommonPacketListenerImplAccessor) context.networkHandler()).owo$getConnection());
+                context.networkHandler().completeTask(CheckSwapTask.TYPE);
+            }
+        );
     }
 
     @Environment(EnvType.CLIENT)
@@ -134,6 +157,12 @@ public class CharacterHandler {
             S2CUpdateCharacterChoices.TYPE,
             (payload, context) -> CharacterPicker.CHARACTER_CHOICES.setValue(payload.choices())
         );
+
+        ClientConfigurationNetworking.registerGlobalReceiver(
+            S2CCheckSwap.TYPE,
+            (payload, context) ->
+                context.responseSender().sendPacket(new C2SCheckSwap(CharacteristicClient.ALWAYS_PICK_CHARACTER.get()))
+        );
     }
 
     //region PROFILE SWAPPING
@@ -158,6 +187,7 @@ public class CharacterHandler {
         }
 
         @Override
+        @NonNull
         public Type type() {
             return TYPE;
         }
@@ -171,6 +201,7 @@ public class CharacterHandler {
         );
 
         @Override
+        @NonNull
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
@@ -182,6 +213,7 @@ public class CharacterHandler {
         public static final Endec<C2SSwapProfile> ENDEC = Endec.unit(INSTANCE);
 
         @Override
+        @NonNull
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
@@ -202,6 +234,7 @@ public class CharacterHandler {
         }
 
         @Override
+        @NonNull
         public Type type() {
             return TYPE;
         }
@@ -216,6 +249,7 @@ public class CharacterHandler {
         );
 
         @Override
+        @NonNull
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
@@ -229,6 +263,7 @@ public class CharacterHandler {
         );
 
         @Override
+        @NonNull
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
@@ -240,6 +275,7 @@ public class CharacterHandler {
         public static final Endec<C2SOpenCharacterSwitcher> ENDEC = Endec.unit(INSTANCE);
 
         @Override
+        @NonNull
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
@@ -253,6 +289,7 @@ public class CharacterHandler {
         );
 
         @Override
+        @NonNull
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }
@@ -266,6 +303,57 @@ public class CharacterHandler {
         );
 
         @Override
+        @NonNull
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+    //endregion
+
+    //region CHECK SWAP
+
+    private static final Identifier CHECK_SWAP = Characteristic.id("check_client_swap");
+
+    private static final Set<Connection> SWAP_WANTERS = Collections.newSetFromMap(new WeakHashMap<>());
+
+    public record CheckSwapTask() implements ConfigurationTask {
+        public static final ConfigurationTask.Type TYPE = new ConfigurationTask.Type(CHECK_SWAP.toString());
+
+        @Override
+        public void start(@NonNull Consumer<Packet<?>> consumer) {
+            consumer.accept(ServerConfigurationNetworking.createS2CPacket(S2CCheckSwap.INSTANCE));
+        }
+
+        @Override
+        @NonNull
+        public Type type() {
+            return TYPE;
+        }
+    }
+
+    public static class S2CCheckSwap implements CustomPacketPayload {
+        public static final S2CCheckSwap INSTANCE = new S2CCheckSwap();
+        public static final Type<S2CCheckSwap> TYPE = new Type<>(CHECK_SWAP);
+        public static final Endec<S2CCheckSwap> ENDEC = Endec.unit(INSTANCE);
+
+        @Override
+        @NonNull
+        public Type<? extends CustomPacketPayload> type() {
+            return TYPE;
+        }
+    }
+
+
+    public record C2SCheckSwap(boolean wantsToSwap) implements CustomPacketPayload {
+        public static final Type<C2SCheckSwap> TYPE = new Type<>(CHECK_SWAP);
+        public static final Endec<C2SCheckSwap> ENDEC = StructEndecBuilder.of(
+            Endec.BOOLEAN.fieldOf("wantsToSwap", C2SCheckSwap::wantsToSwap),
+            C2SCheckSwap::new
+        );
+
+        @Override
+        @NonNull
         public Type<? extends CustomPacketPayload> type() {
             return TYPE;
         }

@@ -18,6 +18,7 @@
   "client": [
     "client.IntegratedPlayerListMixin",
     "client.IntegratedServerMixin",
+    "client.OptionsMixin",
     "client.PauseScreenMixin",
     "client.SkinTextureDownloaderMixin",
     "client.access.ClientConfigurationPacketListenerImplAccessor"
